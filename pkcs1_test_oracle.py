@@ -22,6 +22,8 @@ header = m[:2]
 m_with_padding = m[2:]
 mandatory_padding = m[2:10]
 
+print(hexlify(m))
+
 if header != "\x00\x02":
   print("Error: m does not start with 0x0002: %s" % hexlify(header), file=stderr)
   error = 2 
@@ -34,6 +36,7 @@ elif "\x00" not in m_with_padding:
 else:
   try:
     print(m[m.index("\x00", 2) + 1:])
+    print(hexlify(m[m.index("\x00", 2) + 1:]))
   except ValueError as ve:
     print("Error: Looks like I forgot a test case! Sorry ;): %s" % ve)
 exit(error)
