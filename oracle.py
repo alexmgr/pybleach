@@ -48,7 +48,7 @@ class ExecOracle(Oracle):
     """
     >>> def callback(stdout, stderr, ret_code):
     ...   return True
-    >>> o = ExecOracle("./pkcs1_test_oracle.py", ["256.priv", "%x"])
+    >>> o = ExecOracle("./pkcs1_test_oracle.py", ["keypairs/256.priv", "%064x"])
     >>> o.query("1234abcd", None)
     Traceback (most recent call last):
     ValueError: A callback must be provided to evaluate the output of the oracle
