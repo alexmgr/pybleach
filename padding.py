@@ -201,14 +201,16 @@ class Bleichenbacher(object):
   def stop_search(self):
     self.__worker_pool_stop()
     self.__result_thread_stop()
+    self.__task_queue.close()
+    self.__result_queue.close()
 
   def run_search(self, c):
     M = self.M0
     s_min = self.s_min_start
     s_max = None
     
-    s_min, i = 42298, 1
-    #s_min, i = self.s_search(c, s_min, s_max)
+    #s_min, i = 42298, 1
+    s_min, i = self.s_search(c, s_min, s_max)
 
     while not self.found_solution:
       a = list(M)[0][0]
