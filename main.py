@@ -1,17 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import copy_reg
 import logging
-from types import MethodType
-from oracle import ExecOracle
+import time
+from oracle import ExecOracle, OracleTimer
 from padding import Bleichenbacher
 
 if __name__ == "__main__":
   logging.basicConfig(level=logging.INFO)
   try:
-    def callback(stdout, stderr, rc):
-      #print("From user callback", stdout, stderr, rc)
+    def callback(stdout, stderr, rc, query_time):
       return True if rc != 2 else False
     o = ExecOracle("./pkcs1_test_oracle.py", ["keypairs/1024.priv", "%0256x"])
     b = Bleichenbacher.pubkey_from_file("keypairs/1024.pub", o, callback)

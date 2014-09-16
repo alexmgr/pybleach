@@ -1,6 +1,25 @@
+from __future__ import with_statement
+import timeit
 import os
 from subprocess import Popen, PIPE
 from utils import NumUtils
+
+class OracleTimer(object):
+  """
+  >>> import time
+  >>> with OracleTimer() as ot:
+  ...   time.sleep(0.1)
+  >>> 0.0 < ot.duration < 0.2
+  True
+  """
+
+  def __enter__(self):
+    self.start = timeit.default_timer()
+    return self
+
+  def __exit__(self, *args, **kwargs):
+    self.end = timeit.default_timer()
+    self.duration = self.end - self.start
 
 class Oracle(object):
 
@@ -34,6 +53,7 @@ class ExecOracle(Oracle):
     True
     >>> restore() 
     """
+    super(Oracle, self).__init__()
     if os.path.exists(path):
       if os.access(path, os.X_OK):
         self.path = path
@@ -42,11 +62,10 @@ class ExecOracle(Oracle):
     else:
       raise ValueError("%s not found" % path)
     self.args = args
-    super(Oracle, self).__init__()
 
   def query(self, c, callback):
     """
-    >>> def callback(stdout, stderr, ret_code):
+    >>> def callback(stdout, stderr, ret_code, query_duration):
     ...   return True
     >>> o = ExecOracle("./pkcs1_test_oracle.py", ["keypairs/256.priv", "%064x"])
     >>> o.query("1234abcd", None)
@@ -65,9 +84,10 @@ class ExecOracle(Oracle):
       except TypeError:
         args.append(arg)
     process = Popen(args, stdout=PIPE, stderr=PIPE)
-    stdout, stderr = process.communicate()
+    with OracleTimer() as timer:
+      stdout, stderr = process.communicate()
     rc = process.returncode
-    return callback(stdout, stderr, rc)
+    return callback(stdout, stderr, rc, timer.duration)
 
 if __name__ == "__main__":
   import doctest

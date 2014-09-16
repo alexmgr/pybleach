@@ -1,6 +1,7 @@
 from __future__ import with_statement
 import logging
 import multiprocessing as mp
+import signal
 import threading as th
 from oracle import Oracle, ExecOracle
 from Crypto.PublicKey import RSA
@@ -47,6 +48,7 @@ class RSAOracleWorker(mp.Process):
       self.c = NumUtils.to_int_error(task[1], "Ciphertext")
       self.s = task[2]
       self.i = task[3]
+      signal.signal(signal.SIGINT, signal.SIG_IGN)
 
   def __parse_task(self, task):
     """ Returns a task as an RSATask object
@@ -189,6 +191,7 @@ class Bleichenbacher(object):
   def __worker_pool_stop(self):
     for p in self.__worker_pool:
       self.__task_queue.put(Bleichenbacher.__POISON_PILL)
+      p.terminate()
       p.join()
     self.__logger.info("Stopped all worker threads in the pool")
     self.__worker_pool_running = False
@@ -196,6 +199,7 @@ class Bleichenbacher(object):
   def __result_thread_stop(self):
     self.__result_queue.put(Bleichenbacher.__POISON_PILL)
     self.__result_worker.join()
+    self.__logger.info("Stopped result polling thread")
 
   def __submit_pool_task(self, task):
     self.__logger.debug("Sending task %i to processing pool:" % (task[0]))
