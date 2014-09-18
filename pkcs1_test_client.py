@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
-from argparse import ArgumentParser, ArgumentTypeError, FileType
+from argparse import ArgumentParser, FileType
 from binascii import hexlify, unhexlify
 from os import linesep
-from sys import argv, stdin, stderr
+from sys import stdin, stderr
 from Crypto.PublicKey import RSA
 from padding import PKCS1_v15
 from utils import NumUtils
@@ -45,7 +45,7 @@ if __name__ == "__main__":
   if args.pubkey != None:
     try:
       rsa = RSA.importKey(args.pubkey.read())
-      k = NumUtils.pow2_round(rsa.size()) / 8
+      k = NumUtils.pow2_round(rsa.size())
       print_encrypted = True
     except Exception as ex:
       print("Can't load public key from file %s: " % args.pubkey.name, ex, file=stderr)
@@ -53,7 +53,7 @@ if __name__ == "__main__":
       exit(1)
 
   if args.length != None:
-    k = NumUtils.pow2_round(args.length) / 8
+    k = NumUtils.pow2_round(args.length)
 
   if args.hex:
     try:

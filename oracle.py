@@ -27,6 +27,12 @@ class Oracle(object):
     pass
  
   def query(self, c, callback):
+    """
+    >>> o = Oracle()
+    >>> o.query(123, None)
+    Traceback (most recent call last):
+    NotImplementedError: Override this method to query the padding oracle
+    """
     raise NotImplementedError("Override this method to query the padding oracle")
 
 class ExecOracle(Oracle):
@@ -88,6 +94,15 @@ class ExecOracle(Oracle):
       stdout, stderr = process.communicate()
     rc = process.returncode
     return callback(stdout, stderr, rc, timer.duration)
+
+class HttpOracle(Oracle):
+
+  def __init__(self):
+    super(Oracle, self).__init__()
+    pass
+
+  def query(self, c,callback):
+    pass
 
 if __name__ == "__main__":
   import doctest
