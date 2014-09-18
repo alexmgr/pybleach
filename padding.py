@@ -1,6 +1,7 @@
 from __future__ import with_statement
 import logging
 import multiprocessing as mp
+import random
 import signal
 import threading as th
 from oracle import Oracle, ExecOracle
@@ -387,6 +388,65 @@ class Bleichenbacher(object):
       s_max = NumUtils.floor_int(self.B3 + r * self.n, a)
       r += 1
       yield (s_min, s_max)
+
+class PKCS1_v15(object):
+
+  HEADER = "\x00\x02"
+  DELIMITER = "\x00"
+  MIN_PAD_LEN = 8
+  MIN_LEN = len(HEADER) + MIN_PAD_LEN + len(DELIMITER)
+  FUNC_TABLE = {1:"conforming_message",
+                2:"conforming_consecutive_null_bytes",
+                3:"non_conforming_message_header",
+                4:"non_conforming_padding_length",
+                5:"non_conforming_no_delimiter"
+                }
+
+  def __init__(self, key_length):
+    self.k = key_length
+
+  def get_random_padding(self, data):
+    return self.__get_random_bytes(data, ["\x00"])
+
+  def conforming_message(self, data):
+    padding_len = self.k - len(data) - len(PKCS1_v15.HEADER) - len(PKCS1_v15.DELIMITER)
+    if padding_len < PKCS1_v15.MIN_PAD_LEN:
+      raise ValueError("Cleartext too long to be conforming: max => %i bytes, provided => %i bytes" % (self.k - PKCS1_v15.MIN_LEN, len(data)))
+    random_padding = self.get_random_padding(padding_len)
+    return PKCS1_v15.HEADER + random_padding + PKCS1_v15.DELIMITER + data
+
+  def conforming_consecutive_null_bytes(self, data, index=-1, extra_nulls=2, pad_back=True):
+    padded_m = self.conforming_message(data)
+    if index == -1:
+      index = padded_m.index("\x00", 1) + 1
+    if pad_back == True:
+      index -= (extra_nulls + 1)
+    if index < 0 or index >= self.k or index + extra_nulls >= self.k:
+      raise IndexError("Cannot pad null bytes passed data boundary")
+    return padded_m[:index] + "\x00"*extra_nulls + padded_m[index + extra_nulls:]
+
+  def non_conforming_message_header(self, data, header="\x00\x01"):
+    return header + self.conforming_message(data)[2:]
+
+  def non_conforming_padding_length(self, data, byte_index=4):
+    padded_m = self.conforming_message(data)
+    abs_pos = len(PKCS1_v15.HEADER) + byte_index - 1
+    return padded_m[:abs_pos] + "\x00" + padded_m[abs_pos + 1:]
+
+  def non_conforming_no_delimiter(self, data, replacement="\xff"):
+    padded_m = self.conforming_message(data)
+    null_index = padded_m.index("\x00", 1)
+    return padded_m[:null_index] + replacement + padded_m[null_index + 1:]
+
+  def __get_random_bytes(self, length, excluded=[]):
+    random_gen = random.Random()
+    random_bytes = ""
+    while (len(random_bytes) != length):
+      # counter-intuitive: max boundary 0xff included
+      random_byte = chr(random_gen.randint(0x0, 0xff))
+      if random_byte not in excluded:
+        random_bytes += random_byte
+    return random_bytes
 
 if __name__ == "__main__":
   import doctest
