@@ -1,6 +1,7 @@
 from __future__ import with_statement
 import timeit
 import os
+import urllib, urllib2, cookielib
 from subprocess import Popen, PIPE
 from utils import NumUtils
 
@@ -97,12 +98,109 @@ class ExecOracle(Oracle):
 
 class HttpOracle(Oracle):
 
-  def __init__(self):
+  def __init__(self, url, get={}, post=None, headers=None):
     super(Oracle, self).__init__()
-    pass
+    if url == None:
+      raise ValueError("URL cannot be empty")
+    self.url = url
+    self.get = get
+    self.post = post
+    self.headers = headers
 
-  def query(self, c,callback):
-    pass
+  def __do_http_request(self, url, c=None):
+    """ Ugly code to deal with most situations
+    REFACTOR!!!!
+    """
+    if self.get != {}:
+      url = "%s?%s" % (url, urllib.urlencode(self.__insert_ciphertext(c, self.get)))
+    else:
+      url = self.url
+    
+    if c != None:
+      post = self.__insert_ciphertext(c, self.post)
+      headers = self.__insert_ciphertext(c, self.headers)
+    else:
+      post = self.post
+      headers = self.headers
+
+    if post == None and headers == None:
+      req = urllib2.Request(url)
+    elif post != None:
+      req = urllib2.Request(url, urllib.urlencode(post))
+    elif headers != None:
+      req = urllib2.Request(url, headers=headers)
+    else:
+      req = urllib2.Request(url, urllib.urlencode(post), headers)
+    
+    resp = None
+    try:
+      with OracleTimer() as timer:
+        try:
+          resp = urllib2.urlopen(req)
+        except urllib2.HTTPError as he:
+          resp = he
+    finally:
+        duration = timer.duration
+    return resp, duration
+
+  def set_cookie(self, cookie_url):
+    """ Sets the cookie by querying the remote site
+    >>> ho = HttpOracle("https://www.google.com")
+    >>> ho.set_cookie()
+    >>> [True for cookie in ho.cookie_jar if "google" in cookie.domain]
+    [True, True]
+    """
+    self.cookie_jar = cookielib.CookieJar()
+    opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.cookie_jar))
+    urllib2.install_opener(opener)
+    self.__do_http_request(cookie_url)
+
+  def __insert_ciphertext(self, c, template):
+    """ Inserts the ciphertext value into the template
+    >>> get_values = {"param1":"some_stuff", "param2":"blah => %s"}
+    >>> ho = HttpOracle("http://www.w3c.org", get_values)
+    >>> sub = ho._HttpOracle__insert_ciphertext("ciphertext", get_values)
+    >>> len(sub) == len(get_values)
+    True
+    >>> sub["param2"] == "blah => ciphertext"
+    True
+    """
+    values = None
+    if template != None:
+      values = {}
+      for k, v in template.iteritems():
+        try:
+          values[k] = v % c
+        except TypeError:
+          values[k] = v
+    return values
+
+  def set_proxy(self, proxies=None):
+    if proxies == None:
+      proxy = urllib2.ProxyHandler()
+    else:
+      proxy = urllib2.ProxyHandler(proxies)
+    opener = urllib2.build_opener(proxy)
+    urllib2.install_opener(opener)
+
+  def query(self, c, callback):
+    """ Perform http request to the oracle. Get http response back as well as timing
+    >>> def callback(resp, duration):
+    ...   # dict(resp.info()) to get headers
+    ...   return resp.getcode(), duration
+    >>> get_values = {"param1":"some_stuff", "param2":"blah => %s"}
+    >>> ho = HttpOracle("http://www.w3c.org", get_values)
+    >>> resp = ho.query("123456789", callback)
+    >>> resp[0]
+    200
+    """
+    try:
+      resp, query_duration = self.__do_http_request(self.url, c)
+    except urllib2.URLError as ue:
+      # TODO add logging
+      resp = None
+      query_duration = -1
+    return callback(resp, query_duration)
 
 if __name__ == "__main__":
   import doctest

@@ -3,7 +3,7 @@
 
 import logging
 import time
-from oracle import ExecOracle, OracleTimer
+from oracle import ExecOracle
 from padding import Bleichenbacher
 
 if __name__ == "__main__":
