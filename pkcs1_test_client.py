@@ -14,6 +14,7 @@ def parse_arguments():
   parser = ArgumentParser(description="A PKCS1 v1.5 client, to test responses to various padding conditions")
   parser.add_argument("cleartext", help="The cleartext to PKCS1 v1.5 pad or encrypt. If not provided, stdin is assumed", type=str, default='-', nargs='?')
   parser.add_argument("-x", "--hex", help="Consider the cleartext as a hex encoded string. Default is false", action="store_true")
+  parser.add_argument("-c", "--clear", help="Output the cleartext message instead of the encrypted one. Default is false with -f", action="store_false")
   length_group = parser.add_mutually_exclusive_group(required=True)
   length_group.add_argument("-l", "--length", help="The length of the RSA modulus in bits", type=int)
   length_group.add_argument("-f", "--pubkey", help="The PEM file containing the public key", type=FileType('r'))
@@ -27,16 +28,17 @@ def parse_arguments():
   return parser
 
 if __name__ == "__main__":
-  print_encrypted = False
 
   parser = parse_arguments()
   args = parser.parse_args()
-  
+
   if args.cleartext != '-':
     cleartexts = [args.cleartext]
   else:
     cleartexts = [cleartext.strip(linesep) for cleartext in stdin.readlines()]
   
+  print_encrypted = args.clear
+
   if args.tests == None:
     tests = (1,)
   else:
@@ -46,11 +48,12 @@ if __name__ == "__main__":
     try:
       rsa = RSA.importKey(args.pubkey.read())
       k = NumUtils.pow2_round(rsa.size())
-      print_encrypted = True
     except Exception as ex:
       print("Can't load public key from file %s: " % args.pubkey.name, ex, file=stderr)
       parser.print_help()
       exit(1)
+  else:
+      print_encrypted = False
 
   if args.length != None:
     k = NumUtils.pow2_round(args.length)
@@ -67,6 +70,7 @@ if __name__ == "__main__":
   for m in cleartexts:
     for i in tests:
       padded_cleartext = getattr(pkcs1, PKCS1_v15.FUNC_TABLE[i])(m)
+      # Should enforce output length here
       if print_encrypted:
         c = rsa.encrypt(padded_cleartext, 0L)
         print(hexlify(c[0]))

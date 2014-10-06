@@ -125,9 +125,9 @@ class HttpOracle(Oracle):
 
     if post == None and headers == None:
       req = urllib2.Request(url)
-    elif post != None:
+    elif post != None and headers == None:
       req = urllib2.Request(url, urllib.urlencode(post))
-    elif headers != None:
+    elif post == None and headers != None:
       req = urllib2.Request(url, headers=headers)
     else:
       req = urllib2.Request(url, urllib.urlencode(post), headers)
