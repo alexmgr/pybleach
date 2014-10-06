@@ -28,7 +28,7 @@ def kv_pairs_to_dict(free_form_str):
   return kv
 
 def http_response_parser(response, query_duration):
-  print("\tCode: % 8d\tDuration: % 8d" % (response.code, query_duration))
+  print("\tCode: % 8d\tDuration: % 8f" % (response.code, query_duration))
 
 if __name__ == "__main__":
   parser = parse_arguments()
