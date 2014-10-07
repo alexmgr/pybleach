@@ -24,7 +24,7 @@ def kv_pairs_to_dict(free_form_str):
     try:
       kv[items[0]] = items[1]
     except IndexError:
-      kv[items[0]] = None
+      kv[items[0]] = ""
   return kv
 
 def http_response_parser(response, query_duration):

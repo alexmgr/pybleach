@@ -70,10 +70,10 @@ if __name__ == "__main__":
   for m in cleartexts:
     for i in tests:
       padded_cleartext = getattr(pkcs1, PKCS1_v15.FUNC_TABLE[i])(m)
-      # Should enforce output length here
       if print_encrypted:
-        c = rsa.encrypt(padded_cleartext, 0L)
-        print(hexlify(c[0]))
+        c = rsa.encrypt(padded_cleartext, 0)[0]
+        c = "\x00"*(k/8-len(c)) + c
+        print(hexlify(c))
       else:
         print(hexlify(padded_cleartext))
 
