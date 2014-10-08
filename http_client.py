@@ -13,7 +13,8 @@ def parse_arguments():
   parser.add_argument("-n", "--noproxy", help="Do not use a proxy. The http(s)_proxy environment variable will be ignored in this case. Default is to consider the environment variable", action="store_false")
   parser.add_argument("-i", "--iterations", help="Number of times to run the test for a single entry. Helps get more consistent time results", type=int, default=5)
   parser.add_argument("-x", "--headers", help="The headers to set in the request. Format is a list of comma separated key=value pairs. A valueless key entry is also accepted", default="")
-  parser.add_argument("-p", "--post", help="The post parameters to set in the request. Format is a list of comma separated key=value pairs. A valueless key entry is also accepted", default="")
+  parser.add_argument("-p", "--post", help="The post parameters to set in the request. Format is a list of comma separated key=value pairs. A valueless key entry is also accepted. All values provided are then URL encoded", default="")
+  parser.add_argument("-g", "--get", help="The get parameters to set in the URL. Format is a list of comma separated key=value pairs. A valueless key entry is also accepted. All values provided are then URL encoded", default="")
   return parser
 
 def kv_pairs_to_dict(free_form_str):
@@ -29,6 +30,7 @@ def kv_pairs_to_dict(free_form_str):
 
 def http_response_parser(response, query_duration):
   print("\tCode: % 8d\tDuration: % 8f" % (response.code, query_duration))
+  #print(response.read())
 
 if __name__ == "__main__":
   parser = parse_arguments()
@@ -39,7 +41,13 @@ if __name__ == "__main__":
   else:
     ciphertext = [ciphertext.strip(linesep) for ciphertext in stdin.readlines()]
 
-  http_client = HttpOracle(args.url)
+  get_free_form = args.get
+  if get_free_form != "":
+    get = kv_pairs_to_dict(get_free_form)
+  else:
+    get = {}
+
+  http_client = HttpOracle(args.url, get)
 
   if not args.noproxy:
     http_client.set_proxy()
