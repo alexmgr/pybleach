@@ -1,7 +1,7 @@
-pyorapad
+pybleach
 ========
 
-A library to facilitate the exploitation of padding oracle attacks, more specifically attacks on PKCS1_v1.5. It implements the [Bleichenbacher](http://archiv.infsec.ethz.ch/education/fs08/secsem/Bleichenbacher98.pdf) attack to decrypt any ciphertext given a padding oracle.
+A library to facilitate the detection and exploitation of padding oracle attacks, more specifically attacks on PKCS1_v1.5. It implements the [Bleichenbacher](http://archiv.infsec.ethz.ch/education/fs08/secsem/Bleichenbacher98.pdf) attack to decrypt any ciphertext given a padding oracle.
 
 ## Generation of faulty padding
 
